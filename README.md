@@ -73,7 +73,83 @@ Create an IAM role with the following policy:
 3. Use the following code:
 
 ```python
-[Backup Lambda Function Code as provided in the original message]
+[import boto3
+import json
+import os
+import datetime
+from botocore.exceptions import ClientError
+
+def lambda_handler(event, context):
+    """
+    Lambda function to backup Route 53 DNS records to an S3 bucket.
+    
+    Required environment variables:
+    - BACKUP_BUCKET: S3 bucket where the backup will be stored.
+    """
+    try:
+        # Initialize AWS clients
+        route53 = boto3.client('route53')
+        s3 = boto3.client('s3')
+        
+        # Get environment variable for S3 bucket
+        backup_bucket = os.environ['BACKUP_BUCKET']
+        
+        # Get list of hosted zones
+        hosted_zones = route53.list_hosted_zones()['HostedZones']
+        
+        # Set current date for folder structure
+        current_date = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        for zone in hosted_zones:
+            zone_id = zone['Id'].split('/')[-1]
+            zone_name = zone['Name'].rstrip('.')
+            
+            # Retrieve DNS records from the hosted zone
+            records = []
+            paginator = route53.get_paginator('list_resource_record_sets')
+            for page in paginator.paginate(HostedZoneId=zone_id):
+                records.extend(page['ResourceRecordSets'])
+            
+            # Prepare backup data
+            backup_data = {
+                "zone": {
+                    "Id": zone_id,
+                    "Name": zone_name
+                },
+                "records": records
+            }
+            
+            # Define backup file path (folder structure: date/zone_name/backup.json)
+            backup_file_key = f"{current_date}/{zone_name}/route53_backup.json"
+            
+            # Save backup to S3
+            s3.put_object(
+                Bucket=backup_bucket,
+                Key=backup_file_key,
+                Body=json.dumps(backup_data, indent=4).encode('utf-8')
+            )
+            
+            print(f"Backup for hosted zone {zone_name} stored at {backup_file_key} in bucket {backup_bucket}")
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Backup operation completed',
+                'backup_bucket': backup_bucket,
+                'date': current_date
+            })
+        }
+        
+    except Exception as e:
+        print(f"Backup failed: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'message': 'Backup operation failed',
+                'error': str(e)
+            })
+        }
+]
 ```
 
 ### Step 4: Create Restore Lambda Function
@@ -82,7 +158,67 @@ Create an IAM role with the following policy:
 3. Use the following code:
 
 ```python
-[Restore Lambda Function Code as provided in the original message]
+[import boto3
+import json
+import os
+from botocore.exceptions import ClientError
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+def lambda_handler(event, context):
+    """
+    Restore DNS records from an S3 backup to a Route 53 hosted zone.
+    """
+
+    try:
+        # Fetch environment variables and event parameters
+        backup_bucket = os.environ['BACKUP_BUCKET']
+        backup_key = event['backup_key']
+        hosted_zone_id = event['hosted_zone_id']
+        
+        # Initialize AWS clients
+        route53 = boto3.client('route53')
+        s3 = boto3.client('s3')
+        
+        # Fetch the backup file from S3
+        response = s3.get_object(Bucket=backup_bucket, Key=backup_key)
+        backup_data = json.loads(response['Body'].read().decode('utf-8'))
+        
+        # Extract and filter records (excluding NS and SOA)
+        records = backup_data['records']
+        filtered_records = [r for r in records if r['Type'] not in ['NS', 'SOA']]
+        
+        # Restore records in batches of 100
+        batch_size = 100
+        for i in range(0, len(filtered_records), batch_size):
+            batch = filtered_records[i:i + batch_size]
+            changes = [{'Action': 'CREATE', 'ResourceRecordSet': record} for record in batch]
+            
+            route53.change_resource_record_sets(
+                HostedZoneId=hosted_zone_id,
+                ChangeBatch={'Changes': changes}
+            )
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Restore operation completed',
+                'restored_zone_id': hosted_zone_id
+            })
+        }
+        
+    except ClientError as e:
+        logger.error(f"Restore failed: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'message': 'Restore operation failed',
+                'error': str(e)
+            })
+        }
+]
 ```
 
 ### Step 5: Schedule Backup
