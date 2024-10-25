@@ -23,7 +23,7 @@ def lambda_handler(event, context):
         hosted_zones = route53.list_hosted_zones()['HostedZones']
         
         # Set current date for folder structure
-        current_date = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        current_date = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
         
         for zone in hosted_zones:
             zone_id = zone['Id'].split('/')[-1]
