@@ -1,0 +1,24 @@
+{
+    "name": "route53-dns-changes-trigger",
+    "description": "Triggers Lambda function when Route53 DNS records are modified",
+    "eventPattern": {
+        "source": ["aws.route53"],
+        "detail-type": ["AWS API Call via CloudTrail"],
+        "detail": {
+            "eventSource": ["route53.amazonaws.com"],
+            "eventName": [
+                "ChangeResourceRecordSets",
+                "CreateResourceRecordSet",
+                "DeleteResourceRecordSet",
+                "UpsertResourceRecordSet"
+            ]
+        }
+    },
+    "state": "ENABLED",
+    "targets": [
+        {
+            "id": "Route53BackupLambda",
+            "arn": "arn:aws:lambda:REGION:ACCOUNT_ID:function:lm-masterproduction-route53-records-backup"
+        }
+    ]
+}
