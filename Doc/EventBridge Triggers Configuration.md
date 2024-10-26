@@ -68,7 +68,7 @@ Setup Steps:
             "Action": [
                 "lambda:InvokeFunction"
             ],
-            "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:lm-masterproduction-route53-records-backup"
+            "Resource": "arn:aws:lambda:ap-south-1:9999999999999:function:route53-records-backup"
         }
     ]
 }
