@@ -20,6 +20,9 @@ def lambda_handler(event, context):
         # Get environment variable for S3 bucket
         backup_bucket = os.environ['BACKUP_BUCKET']
         
+        # Validate and clean bucket name
+        backup_bucket = backup_bucket.split('/')[0].lower().strip()
+        
         # Get list of hosted zones
         hosted_zones = route53.list_hosted_zones()['HostedZones']
         
@@ -56,8 +59,8 @@ def lambda_handler(event, context):
             }
             
             # Define backup file path including zone ID
-            # Format: date/zone_name/zone_id/route53_backup.json
-            backup_file_key = f"{current_date}/{zone_name}/{zone_id}/route53_backup.json"
+            # Format: Route53-Backup/date/zone_name/zone_id/route53_backup.json
+            backup_file_key = f"Route53-Backup/{current_date}/{zone_name}/{zone_id}/route53_backup.json"
             
             # Save detailed backup to S3
             s3.put_object(
@@ -75,7 +78,7 @@ def lambda_handler(event, context):
                     "backup_path": backup_file_key
                 }
                 
-                summary_file_key = f"{current_date}/{zone_name}/zone_summary.json"
+                summary_file_key = f"Route53-Backup/{current_date}/{zone_name}/zone_summary.json"
                 
                 # Append to or create summary file
                 try:
